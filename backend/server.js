@@ -22,7 +22,11 @@ mongoose.connect(MONGO_URI)
     .then(() => console.log('MongoDB connected'))
     .catch(err => console.error('MongoDB connection error:', err));
 
-app.use(cors());
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+app.use(cors({
+    origin: FRONTEND_URL,
+    credentials: true
+}));
 app.use(express.json());
 
 // Serve static thumbnails
