@@ -33,6 +33,18 @@ app.use(express.json());
 app.use('/thumbnails', express.static(path.join(__dirname, 'public/thumbnails')));
 
 // Routes
+app.get('/', (req, res) => {
+    res.send('Backend is working successfully! Status: Active');
+});
+
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'UP',
+        timestamp: new Date(),
+        uptime: process.uptime()
+    });
+});
+
 app.use('/api/videos', videoRoutes);
 
 app.listen(PORT, () => {
