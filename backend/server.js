@@ -17,14 +17,6 @@ console.log(`MONGO_URI: ${MONGO_URI}`);
 console.log(`FRONTEND_URL: ${FRONTEND_URL}`);
 console.log('----------------------------');
 
-// Create necessary directories
-if (!fs.existsSync(path.join(__dirname, 'uploads'))) {
-    fs.mkdirSync(path.join(__dirname, 'uploads'));
-}
-if (!fs.existsSync(path.join(__dirname, 'public/thumbnails'))) {
-    fs.mkdirSync(path.join(__dirname, 'public/thumbnails'), { recursive: true });
-}
-
 mongoose.connect(MONGO_URI)
     .then(() => console.log('MongoDB connected successfully'))
     .catch(err => {
@@ -42,8 +34,6 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Serve static thumbnails
-app.use('/thumbnails', express.static(path.join(__dirname, 'public/thumbnails')));
 
 // Routes
 app.get('/', (req, res) => {
@@ -60,6 +50,10 @@ app.get('/health', (req, res) => {
 
 app.use('/api/videos', videoRoutes);
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`Server running on http://localhost:${PORT}`);
+    });
+}
+
+module.exports = app;

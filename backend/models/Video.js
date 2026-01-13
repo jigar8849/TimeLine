@@ -5,12 +5,14 @@ const videoSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    filename: {
-        type: String, // Original filename
+    // Cloudinary Public ID
+    cloudinaryId: {
+        type: String,
         required: true
     },
-    filePath: {
-        type: String, // Path on disk
+    // Secure URL from Cloudinary
+    url: {
+        type: String,
         required: true
     },
     duration: {
@@ -18,7 +20,7 @@ const videoSchema = new mongoose.Schema({
         default: 0
     },
     thumbnailPattern: {
-        type: String, // e.g., "/thumbnails/video-id/thumb-%s.png"
+        type: String, // format: https://res.cloudinary.com/.../video/upload/so_%s/v.../id.jpg
         default: ""
     },
     thumbnailCount: {

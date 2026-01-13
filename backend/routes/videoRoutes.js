@@ -1,27 +1,29 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const path = require('path');
 const Video = require('../models/Video');
-const { generateThumbnails, getVideoMetadata } = require('../utils/videoProcessor');
-const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+require('dotenv').config();
 
-// Configure Multer
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        // Ensure uploads dir exists
-        if (!fs.existsSync('uploads')) {
-            fs.mkdirSync('uploads');
-        }
-        cb(null, 'uploads/');
-    },
-    filename: (req, file, cb) => {
-        // Sanitize filename to avoid issues
-        const sanitized = file.originalname.replace(/[^a-zA-Z0-9.]/g, '_');
-        cb(null, Date.now() + '-' + sanitized);
-    }
+// Configure Cloudinary
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
 });
-const upload = multer({ storage });
+
+// Configure Multer Storage for Cloudinary
+const storage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+        folder: 'timeline_videos',
+        resource_type: 'video',
+        allowed_formats: ['mp4', 'mov', 'avi', 'mkv']
+    },
+});
+
+const upload = multer({ storage: storage });
 
 // POST /api/videos/upload
 router.post('/upload', upload.single('video'), async (req, res) => {
@@ -30,39 +32,55 @@ router.post('/upload', upload.single('video'), async (req, res) => {
             return res.status(400).json({ error: 'No video file provided' });
         }
 
-        console.log('Video uploaded:', req.file.path);
-        const filePath = req.file.path;
-        const metadata = await getVideoMetadata(filePath);
-        const duration = metadata.duration;
+        console.log('Cloudinary Upload Result:', req.file);
+
+        // Fetch duration from Cloudinary API (req.file might not have it depending on driver version)
+        // req.file.filename gives the public_id
+        const videoInfo = await cloudinary.api.resource(req.file.filename, {
+            resource_type: 'video',
+            image_metadata: true
+        });
+
+        const duration = videoInfo.duration || 0;
+
+        // Construct a pattern for thumbnails.
+        // Cloudinary can generate a thumbnail at a specific second using 'so_<seconds>'
+        // We use '%d' as a placeholder that the frontend presumably replaces.
+        // Example URL: https://res.cloudinary.com/demo/video/upload/so_%d/v12345/my_video.jpg
+        // We need to carefully construct this to match what the frontend replacement logic expects.
+        // Assuming frontend replaces "%d" with a number (seconds).
+
+        const baseUrl = videoInfo.secure_url.split('/upload/')[0] + '/upload/';
+        const versionAndId = videoInfo.secure_url.split('/upload/')[1]; // e.g., v123/id.mp4
+
+        // We want a jpg, not mp4.
+        const idWithoutExt = videoInfo.public_id;
+        const version = 'v' + videoInfo.version;
+
+        // Pattern: .../upload/w_300,f_jpg,so_%d/<version>/<public_id>.jpg
+        // Note: We force jpg format.
+        const thumbnailPattern = `${baseUrl}w_300,f_jpg,so_%d/${version}/${idWithoutExt}.jpg`;
 
         // Create Video Entry
         const video = new Video({
             title: req.body.title || req.file.originalname,
-            filename: req.file.filename,
-            filePath: filePath,
-            duration: duration
+            cloudinaryId: req.file.filename,
+            url: req.file.path, // Secure URL
+            duration: duration,
+            thumbnailPattern: thumbnailPattern,
+            thumbnailCount: Math.floor(duration), // One thumb per second roughly
         });
+
         const savedVideo = await video.save();
         console.log('Video saved to DB:', savedVideo._id);
-
-        // Generate Thumbnails
-        const thumbsDir = path.join(__dirname, '../public/thumbnails', savedVideo._id.toString());
-        console.log('Generating thumbnails...');
-        await generateThumbnails(filePath, thumbsDir);
-        console.log('Thumbnails generated.');
-
-        // Count files
-        const files = fs.readdirSync(thumbsDir);
-        savedVideo.thumbnailCount = files.length;
-        // We serve static files from /thumbnails (mapped to public/thumbnails)
-        // Pattern: /thumbnails/<id>/thumb-%d.jpg
-        savedVideo.thumbnailPattern = `/thumbnails/${savedVideo._id}/thumb-%d.jpg`;
-
-        await savedVideo.save();
 
         res.json(savedVideo);
     } catch (err) {
         console.error('Upload error:', err);
+        // Try to delete from cloudinary if DB save fails
+        if (req.file && req.file.filename) {
+            await cloudinary.uploader.destroy(req.file.filename, { resource_type: 'video' });
+        }
         res.status(500).json({ error: 'Processing failed: ' + err.message });
     }
 });
@@ -94,15 +112,9 @@ router.delete('/:id', async (req, res) => {
         const video = await Video.findById(req.params.id);
         if (!video) return res.status(404).json({ error: 'Video not found' });
 
-        // Delete video file
-        if (fs.existsSync(video.filePath)) {
-            fs.unlinkSync(video.filePath);
-        }
-
-        // Delete thumbnails directory
-        const thumbsDir = path.join(__dirname, '../public/thumbnails', video._id.toString());
-        if (fs.existsSync(thumbsDir)) {
-            fs.rmSync(thumbsDir, { recursive: true, force: true });
+        // Delete from Cloudinary
+        if (video.cloudinaryId) {
+            await cloudinary.uploader.destroy(video.cloudinaryId, { resource_type: 'video' });
         }
 
         // Delete from DB
@@ -121,35 +133,8 @@ router.get('/stream/:id', async (req, res) => {
         const video = await Video.findById(req.params.id);
         if (!video) return res.status(404).send('Video not found');
 
-        const path = video.filePath;
-        if (!fs.existsSync(path)) return res.status(404).send('File not found on server');
-
-        const stat = fs.statSync(path);
-        const fileSize = stat.size;
-        const range = req.headers.range;
-
-        if (range) {
-            const parts = range.replace(/bytes=/, "").split("-");
-            const start = parseInt(parts[0], 10);
-            const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-            const chunksize = (end - start) + 1;
-            const file = fs.createReadStream(path, { start, end });
-            const head = {
-                'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-                'Accept-Ranges': 'bytes',
-                'Content-Length': chunksize,
-                'Content-Type': 'video/mp4',
-            };
-            res.writeHead(206, head);
-            file.pipe(res);
-        } else {
-            const head = {
-                'Content-Length': fileSize,
-                'Content-Type': 'video/mp4',
-            };
-            res.writeHead(200, head);
-            fs.createReadStream(path).pipe(res);
-        }
+        // Redirect to Cloudinary URL for streaming
+        res.redirect(video.url);
     } catch (err) {
         console.error(err);
         res.status(500).send('Error streaming video');
