@@ -13,17 +13,25 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
+console.log('--- Cloudinary Config ---');
+console.log('Cloud Name present:', !!process.env.CLOUDINARY_CLOUD_NAME);
+console.log('API Key present:', !!process.env.CLOUDINARY_API_KEY);
+console.log('API Secret present:', !!process.env.CLOUDINARY_API_SECRET);
+
 // Configure Multer Storage for Cloudinary
 const storage = new CloudinaryStorage({
     cloudinary: cloudinary,
     params: {
         folder: 'timeline_videos',
         resource_type: 'video',
-        allowed_formats: ['mp4', 'mov', 'avi', 'mkv']
+        // allowed_formats: ['mp4', 'mov', 'avi', 'mkv'], // Format constraint might be strict
     },
 });
 
-const upload = multer({ storage: storage });
+const upload = multer({
+    storage: storage,
+    limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit for local test
+});
 
 // POST /api/videos/upload
 router.post('/upload', upload.single('video'), async (req, res) => {
