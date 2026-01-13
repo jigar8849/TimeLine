@@ -8,7 +8,7 @@ node_modules/
 .DS_Store
 Thumbs.db
 
-# Backend Storage (Ignore uploaded videos and generated thumbnails)
+# Backend Storage (Local artifacts - using Cloudinary for production)
 backend/uploads/*
 !backend/uploads/.gitkeep
 backend/public/thumbnails/*

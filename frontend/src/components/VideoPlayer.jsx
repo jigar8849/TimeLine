@@ -51,10 +51,14 @@ const VideoPlayer = ({ video }) => {
         const time = percent * duration;
 
         // Calculate thumbnail URL
-        // Pattern: /thumbnails/<id>/thumb-%d.jpg
-        // 1 frame per second. Index = floor(time) + 1
-        const index = Math.max(1, Math.floor(time) + 1);
-        const thumbUrl = `${API_URL}/thumbnails/${video._id}/thumb-${index}.jpg`;
+        let thumbUrl = '';
+        if (video.thumbnailPattern) {
+            thumbUrl = video.thumbnailPattern.replace('%d', Math.floor(time));
+        } else {
+            // Fallback for legacy videos or missing pattern
+            const index = Math.max(1, Math.floor(time) + 1);
+            thumbUrl = `${API_URL}/thumbnails/${video._id}/thumb-${index}.jpg`;
+        }
 
         setHoverData({
             show: true,

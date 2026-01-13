@@ -165,7 +165,7 @@ function App() {
                   <span className="duration-badge">{Math.floor(video.duration / 60)}:{(Math.floor(video.duration % 60)).toString().padStart(2, '0')}</span>
                   {video.thumbnailPattern ? (
                     <img
-                      src={`${API_Base}/thumbnails/${video._id}/thumb-${Math.max(1, Math.floor(video.duration / 2))}.jpg`}
+                      src={video.thumbnailPattern.replace('%d', Math.max(1, Math.floor(video.duration / 2)))}
                       alt={video.title}
                       onError={(e) => e.target.style.display = 'none'}
                     />
