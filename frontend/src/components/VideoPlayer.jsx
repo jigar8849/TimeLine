@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Play, Pause, Volume2, Maximize, RotateCcw } from 'lucide-react';
 import './VideoPlayer.css'; // We will create this
 
-const API_URL = 'http://localhost:5000';
+const API_URL = import.meta.env.VITE_API_URL;
 
 const VideoPlayer = ({ video }) => {
     const videoRef = useRef(null);

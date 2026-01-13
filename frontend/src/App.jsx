@@ -5,7 +5,7 @@ import { Upload, Film, PlayCircle, Loader, Trash2 } from 'lucide-react';
 import VideoPlayer from './components/VideoPlayer';
 import './App.css';
 
-const API_Base = 'http://localhost:5000';
+const API_Base = import.meta.env.VITE_API_URL;
 const API_URL = `${API_Base}/api/videos`;
 
 function App() {
